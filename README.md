@@ -1,212 +1,520 @@
 # RoleScout
 
-RoleScout is an AI-powered job discovery and matching platform. Phase 4 adds durable asynchronous resume processing and job discovery on top of the Phase 1–3 foundation.
+### Find jobs that fit you, not jobs you have to dig through.
+
+RoleScout is a full-stack job discovery and matching platform that turns a user's resume and preferences into personalized job recommendations.
+
+It searches external job listings, normalizes and deduplicates results, evaluates candidate-job compatibility using an explainable matching engine, and provides tools for saving jobs, tracking applications, and understanding job-search activity.
+
+---
 
 ## Features
 
-- Secure email/password registration and login
-- HTTP-only cookie sessions
-- Protected dashboard and logout
-- Express health endpoint
-- PostgreSQL persistence through Prisma migrations
-- Redis connection ready for future background work
-- Responsive React frontend
-- PDF and DOCX resume upload up to 10 MB
-- Local private resume storage and server-side text extraction
-- Candidate profile persistence and editing
-- Optional OpenAI resume parsing with deterministic fallback
-- Real Google Jobs search through the SerpApi adapter
-- Normalized, persisted job feed with pagination and search history
-- BullMQ/Redis workers for resume processing and job discovery
-- Durable pending, processing, completed, and failed states with status endpoints
-- Deterministic candidate-to-job match scoring with explainable breakdowns
-- Saved jobs and user-owned application tracking
-- User-specific analytics for applications, statuses, funnel rates, trends, and searches
+### Resume-powered candidate profile
 
-## Tech Stack
+Upload a resume and automatically extract relevant candidate information such as:
 
-React, TypeScript, Vite, React Router, TanStack Query, Tailwind CSS, Node.js, Express, Prisma, PostgreSQL, Redis, BullMQ, IORedis, Zod, bcryptjs, JWT, pdf-parse, Mammoth, and SerpApi's HTTP API.
+- Skills and technologies
+- Experience
+- Education
+- Job preferences
+- Location preferences
+- Salary expectations
 
-## Prerequisites
+The extracted information is used throughout the platform to personalize job discovery and matching.
 
-Node.js 20+, npm 10+, and Docker Desktop.
+### Personalized job discovery
+
+Search for jobs using:
+
+- Role/title
+- Location
+- Remote or hybrid preferences
+- Employment type
+- Salary preferences
+- Candidate profile
+
+Job listings from external providers are converted into a consistent internal format before being stored and displayed.
+
+### Explainable job matching
+
+Instead of returning an unexplained recommendation score, RoleScout breaks down why a job matches a candidate.
+
+The matching engine evaluates:
+
+| Dimension | Weight |
+|---|---:|
+| Skills | 40% |
+| Experience | 20% |
+| Role relevance | 15% |
+| Location / work mode | 10% |
+| Salary | 10% |
+| Employment type | 5% |
+
+Unavailable information is handled without incorrectly penalizing the candidate.
+
+Each match can provide:
+
+- Overall compatibility score
+- Matching skills
+- Missing skills
+- Experience alignment
+- Role relevance
+- Location compatibility
+- Salary compatibility
+
+### Job management
+
+- Save interesting jobs
+- Remove saved jobs
+- View detailed job information
+- Track application status
+- Manage the job-search pipeline
+
+### Application tracking
+
+Track applications through different stages such as:
+
+```text
+Saved → Applied → Interview → Offer / Rejected
+```
+
+### Personalized recommendations
+
+RoleScout uses the candidate profile, job history, saved jobs, and matching information to surface relevant opportunities.
+
+### Job-search analytics
+
+Track useful job-search activity including:
+
+- Jobs discovered
+- Saved jobs
+- Applications
+- Application pipeline
+- Matching trends
+- Search activity
+
+---
+
+# Architecture
+
+RoleScout uses a modular full-stack architecture with asynchronous background processing for operations that involve external services or potentially long-running work.
+
+```text
+                         ┌─────────────────────┐
+                         │    React Client     │
+                         │   TypeScript/Vite   │
+                         └──────────┬──────────┘
+                                    │
+                                    │ HTTP
+                                    ▼
+                         ┌─────────────────────┐
+                         │    Express API      │
+                         │      REST API       │
+                         └───────┬─────┬───────┘
+                                 │     │
+                    ┌────────────┘     └─────────────┐
+                    ▼                                ▼
+             ┌─────────────┐                  ┌─────────────┐
+             │ PostgreSQL  │                  │    Redis     │
+             │   Prisma    │                  │    BullMQ    │
+             └─────────────┘                  └──────┬──────┘
+                                                     │
+                                                     ▼
+                                            ┌─────────────────┐
+                                            │ Background      │
+                                            │ Workers         │
+                                            └────────┬────────┘
+                                                     │
+                                                     ▼
+                                            ┌─────────────────┐
+                                            │ External Job    │
+                                            │ Provider        │
+                                            └─────────────────┘
+```
+
+### Request flow
+
+A job search does not require the API server to wait for the external provider to finish.
+
+```text
+Client
+  │
+  │ POST /jobs/search
+  ▼
+Express API
+  │
+  ├── Create search record
+  │
+  └── Enqueue background job
+          │
+          ▼
+       BullMQ
+          │
+          ▼
+       Worker
+          │
+          ├── Query provider
+          ├── Normalize listings
+          ├── Deduplicate jobs
+          ├── Persist results
+          └── Update search status
+```
+
+The API can return `202 Accepted` while the search continues in the background.
+
+---
+
+# Matching Engine
+
+RoleScout separates **matching** from external AI services.
+
+The numerical compatibility score is deterministic and based on candidate and job attributes.
+
+```text
+Candidate Profile
+       │
+       ├── Skills
+       ├── Experience
+       ├── Role
+       ├── Location
+       ├── Salary
+       └── Employment Preferences
+                │
+                ▼
+         Matching Engine
+                │
+                ▼
+        Compatibility Score
+                │
+        ┌───────┴────────┐
+        ▼                ▼
+   Match Details    Explanation
+```
+
+AI-assisted processing can be used for unstructured tasks such as extracting information from resumes, understanding job requirements, generating search queries, and producing natural-language explanations.
+
+Deterministic logic remains responsible for the actual matching and ranking calculations.
+
+---
+
+# Job Provider Architecture
+
+External job providers are isolated behind a provider abstraction.
+
+```text
+                 Job Search Service
+                        │
+              ┌─────────┴─────────┐
+              ▼                   ▼
+       External Provider      Mock Provider
+```
+
+This keeps provider-specific API formats out of the core application and allows additional providers to be introduced without changing the rest of the job-discovery system.
+
+Provider responses are normalized into the application's canonical job model before persistence.
+
+---
+
+# Data Flow
+
+### Resume processing
+
+```text
+Resume Upload
+     │
+     ▼
+Validation
+     │
+     ▼
+Background Processing
+     │
+     ▼
+Resume Extraction
+     │
+     ▼
+Candidate Profile
+     │
+     ▼
+PostgreSQL
+```
+
+### Job discovery
+
+```text
+Search Request
+     │
+     ▼
+Search Parameters
+     │
+     ▼
+Background Queue
+     │
+     ▼
+External Provider
+     │
+     ▼
+Normalize
+     │
+     ▼
+Deduplicate
+     │
+     ▼
+Match
+     │
+     ▼
+PostgreSQL
+     │
+     ▼
+Frontend
+```
+
+---
+
+# Security
+
+RoleScout implements several application-level security controls:
+
+- HTTP-only authentication cookies
+- Password hashing
+- Session/version-based authentication invalidation
+- Resource ownership checks
+- Server-side API key management
+- Request rate limiting
+- Helmet security headers
+- Strict CORS configuration
+- File type and upload-size validation
+- Centralized error handling
+- Request IDs for tracing
+- Server-side authorization checks
+
+External API credentials are kept on the server and are never exposed to the browser.
+
+---
+
+# API
+
+RoleScout exposes a versioned REST API.
+
+Example resource groups:
+
+```text
+/api/v1/auth
+/api/v1/profile
+/api/v1/resumes
+/api/v1/jobs
+/api/v1/saved-jobs
+/api/v1/applications
+/api/v1/recommendations
+/api/v1/analytics
+```
+
+An OpenAPI specification is included in the repository for the API contract.
+
+---
+
+# Testing
+
+The backend includes automated tests covering core application behavior, including:
+
+- Authentication
+- Session invalidation
+- Authorization and resource ownership
+- Job matching
+- Job normalization
+- Job deduplication
+- Recommendation logic
+- Analytics
+- Queue payloads
+- Provider failure handling
+- Job discovery boundaries
+
+The project also uses automated CI checks for validation.
+
+---
+
+# Tech Stack
+
+### Frontend
+
+- React
+- TypeScript
+- Vite
+- Tailwind CSS
+
+### Backend
+
+- Node.js
+- Express
+- TypeScript
+
+### Data
+
+- PostgreSQL
+- Prisma ORM
+- Redis
+
+### Background Processing
+
+- BullMQ
+
+### Integrations
+
+- External job-search provider
+- Resume processing
+- AI-assisted extraction and reasoning
+
+### Engineering
+
+- REST API
+- OpenAPI
+- Automated testing
+- GitHub Actions
+- Docker
+
+---
+
+# Project Structure
+
+```text
+RoleScout/
+├── client/                 # React frontend
+│
+├── server/                 # Express backend
+│   ├── src/
+│   │   ├── modules/
+│   │   ├── middleware/
+│   │   ├── workers/
+│   │   └── ...
+│   └── prisma/
+│
+├── docs/                   # API and technical documentation
+│
+├── .github/
+│   └── workflows/          # CI
+│
+├── docker-compose.yml
+├── PROJECT_SPEC.md
+└── README.md
+```
+
+---
+
+# Local Development
+
+## Requirements
+
+- Node.js 20+
+- npm
+- Docker
+- PostgreSQL
+- Redis
 
 ## Installation
 
+Clone the repository:
+
 ```bash
-cp .env.example .env
+git clone https://github.com/abhiinavanand/RoleScout.git
+cd RoleScout
+```
+
+Install dependencies:
+
+```bash
 npm install
 ```
 
-## Environment Variables
+Configure environment variables using the provided example environment files.
 
-Set `NODE_ENV`, `PORT`, `DATABASE_URL`, `REDIS_URL`, `AUTH_SECRET` (at least 32 characters), `CLIENT_URL`, `RESUME_STORAGE_PATH`, `MAX_RESUME_SIZE_BYTES`, and `WORKER_CONCURRENCY` in `.env`. `OPENAI_API_KEY` and `OPENAI_MODEL` are optional. Without an API key, deterministic parsing is used.
-
-Authentication uses an HTTP-only JWT cookie with a seven-day expiration and a server-side per-user session version. Logging out increments that version and invalidates all active sessions for the user, including sessions on other devices. Existing tokens are never logged.
-
-For job discovery, configure `JOB_SEARCH_API_KEY` with a SerpApi key and keep `JOB_SEARCH_PROVIDER=serpapi`. The key is server-side only and is never sent to the frontend. Without it, job searches return a clear configuration error rather than fake jobs.
-
-## Starting PostgreSQL and Redis
+Start the required infrastructure:
 
 ```bash
-docker compose up -d postgres redis
+docker compose up -d
 ```
 
-## Database Migrations
+Run database migrations:
 
 ```bash
-npm run prisma:generate --workspace server
-npx prisma migrate deploy --schema server/prisma/schema.prisma
+npx prisma migrate dev
 ```
 
-For local schema development, use `npm run prisma:migrate --workspace server`.
+Start the development environment using the project's configured development scripts.
 
-## Resume Processing
+---
 
-Authenticated users can upload PDF or DOCX files from `/resume`. Uploads return `202 Accepted` after the file and pending database record are created. The API enqueues only the resume ID; a separate worker extracts text, parses it, and saves the validated `CandidateProfile`. Poll `GET /api/v1/resumes/:id/status` until processing is complete. Files are held in the private local directory configured by `RESUME_STORAGE_PATH`; only safe storage keys are persisted in PostgreSQL.
+# Environment Variables
 
-Resume uploads are limited to 10 MB by default. MIME type, extension, and basic file signatures are checked. Resume contents, extracted text, prompts, and secrets are not logged. External links found in resumes are stored but never fetched.
+Create the required environment files from the provided examples.
 
-## Resume and Profile API
-
-- `POST /api/v1/resumes` — upload a multipart `resume` file
-- `GET /api/v1/resumes` — list the authenticated user's resume metadata
-- `GET /api/v1/resumes/:id` — read owned resume metadata
-- `GET /api/v1/resumes/:id/status` — read asynchronous processing status and error code
-- `DELETE /api/v1/resumes/:id` — delete an owned resume
-- `GET /api/v1/profile` — read the authenticated user's candidate profile
-- `PUT /api/v1/profile` — validate and update the candidate profile
-- `POST /api/v1/profile/reparse` — explicitly regenerate the profile from the latest resume
-
-## Job Discovery
-
-The `/jobs` page sends an authenticated search request to `POST /api/v1/jobs/search`. The API creates a pending search and returns `202 Accepted`; the job-discovery worker runs the deterministic planner, queries SerpApi, validates and normalizes provider responses, deduplicates them, and upserts jobs into PostgreSQL. Poll `GET /api/v1/searches/:id/status` until complete, then read the persisted feed through `GET /api/v1/jobs`. `GET /api/v1/jobs/:id` serves job details and the original provider URL.
-
-Jobs use `source + externalId` as their primary identity. When a provider does not supply an ID, RoleScout uses a conservative fingerprint based on source, company, title, location, and job URL. Provider fields remain isolated from the internal `Job` model.
-
-## Matching
-
-`GET /api/v1/jobs/:id/match` calculates an authenticated user's match on demand from their candidate profile and the normalized job. The deterministic score uses centralized weights: skills 40%, experience 20%, role relevance 15%, location/work mode 10%, employment type 5%, and salary 10%. Dimensions unavailable in the profile or provider data are marked unavailable and excluded from the weighted average rather than treated as mismatches. The job details page displays the overall score, matched/missing skills, component scores, and explanations.
-
-Matching is intentionally not persisted in Phase 5; the same profile and job always produce the same result. No LLM, external call, client-provided score, saved job, or recommendation feed is involved.
-
-## Application Management
-
-The authenticated application tracker is available at `/applications` as a Kanban-style pipeline. Users can save jobs independently through `POST /api/v1/saved-jobs/:jobId`, or track an application from a job detail page. Application statuses are `SAVED`, `APPLIED`, `SCREENING`, `INTERVIEW`, `OFFER`, `REJECTED`, and `WITHDRAWN`; new tracked applications start as `SAVED`. Notes, applied dates, status updates, pagination, filtering, deletion, and ownership checks are supported. Moving an application to `APPLIED` automatically records the current date when no date is supplied, while later status changes preserve that date.
-
-Application endpoints:
-
-- `POST /api/v1/applications`
-- `GET /api/v1/applications?status=INTERVIEW&page=1&pageSize=20`
-- `GET /api/v1/applications/:id`
-- `PATCH /api/v1/applications/:id`
-- `DELETE /api/v1/applications/:id`
-- `GET /api/v1/saved-jobs`
-- `POST /api/v1/saved-jobs/:jobId`
-- `DELETE /api/v1/saved-jobs/:jobId`
-
-Applications and saved jobs use user/job uniqueness constraints so duplicate records cannot be created, including under concurrent requests. Automated submission, reminders, and notifications are intentionally outside Phase 6.
-
-## Personalized Recommendations
-
-Authenticated users can open `/recommendations` or call `GET /api/v1/recommendations/jobs?page=1&pageSize=20` to see persisted jobs ranked against their CandidateProfile. Recommendations reuse the deterministic matching engine used by the job-detail match panel; no LLM is used for ranking or explanations.
-
-The endpoint evaluates a bounded set of up to 500 persisted jobs, sorts by match score, then posted date, then stable job ID, and paginates the ranked results. It does not call SerpApi or create recommendation records. Saved-job and application state is loaded for the authenticated user and included with each result. A profile with no meaningful headline, skills, or experience receives a safe profile-completion response instead of fabricated recommendations. If no persisted jobs are available, the response is an empty result and the UI directs the user to search for jobs.
-
-## Analytics
-
-Authenticated analytics are available at `GET /api/v1/analytics/overview?range=7d|30d|90d|all` and in the `/analytics` UI. Metrics are calculated from the authenticated user's persisted saved jobs, applications, and job searches. The dashboard includes status counts, daily application activity, saved-job/application/search summaries, and rates.
-
-Rate formulas use the selected range and current application records: application rate is applications divided by saved jobs; interview, offer, and rejection rates are the corresponding current-status counts divided by applications. Rates return `null` and display “Not enough data” when the denominator is zero. The current schema does not associate persisted jobs with individual searches, so global job rows are never incorrectly presented as user-specific “jobs discovered”; that metric is returned as unavailable.
-
-Search history is user-owned and available at `/searches`, with rerun and delete actions. `GET /api/v1/searches/:id/status` enforces search ownership. Queue payloads contain only durable IDs, use deterministic job IDs, retry three times with exponential backoff, and retain completed/failed BullMQ records for bounded periods. `WORKER_CONCURRENCY` controls each worker's concurrency.
-
-## Running Backend
-
-```bash
-npm run dev --workspace server
-```
-
-The API runs at `http://localhost:4000`.
-
-## Running the Worker
-
-Run the API and worker as separate processes:
-
-```bash
-npm run worker --workspace server
-```
-
-The worker handles `resume-processing` and `job-discovery`, logs failures, marks final failures durably, and shuts down gracefully on `SIGTERM`/`SIGINT`. Redis and PostgreSQL must be available before starting either process.
-
-## Running Frontend
-
-```bash
-npm run dev --workspace client
-```
-
-The client runs at `http://localhost:5173`.
-
-## Testing
-
-```bash
-npm test
-npm run build
-npm run lint --workspace server
-npm run lint --workspace client
-cd server && npx prisma validate --schema prisma/schema.prisma
-cd .. && npm run openapi:validate
-```
-
-The server suite covers deterministic matching, normalization, provider failures, queue payloads, authentication/session revocation, repository ownership, analytics, recommendations, and a critical job-discovery workflow integration boundary. Provider tests mock `fetch`; no test requires a live SerpApi key. Database-backed end-to-end integration tests require an isolated PostgreSQL/Redis environment and are intentionally not run by the default unit suite.
-
-## API documentation
-
-The OpenAPI 3.0 document is available at [docs/openapi.json](./docs/openapi.json). It documents authentication, ownership-protected resources, validation and common error responses, health/readiness, and the Prometheus metrics endpoint. Validate it with `npm run openapi:validate`. A Swagger UI is not bundled so the API runtime remains dependency-light; import the document into Swagger Editor or another OpenAPI viewer.
-
-## Architecture and deployment
+Typical configuration includes:
 
 ```text
-React/Vite frontend
-        | HTTPS
-        v
-Express API ---- PostgreSQL
-        |
-        +-------- Redis
-                     |
-                     v
-                  BullMQ
-                     |
-                     v
-                  Worker ---- SerpApi
+DATABASE_URL
+REDIS_URL
+JWT_SECRET
+AI_API_KEY
+JOB_PROVIDER_API_KEY
 ```
 
-Deploy the frontend, API, and worker as independent processes. PostgreSQL and Redis should be managed external services in production. The API and worker share `DATABASE_URL`, `REDIS_URL`, and the validated environment configuration; only the API needs `CLIENT_URL`, while only the provider adapter needs the server-side job provider key. Run migrations as a release step before starting API/worker processes. The API's `TRUST_PROXY` value must match the number of trusted reverse-proxy hops so secure cookies and rate limiting observe the original request safely.
+Secrets should never be committed to the repository.
 
-The production environment requires `NODE_ENV`, `DATABASE_URL`, `REDIS_URL`, `AUTH_SECRET`, and `CLIENT_URL`. Optional configuration includes `JOB_SEARCH_API_KEY`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `RESUME_STORAGE_PATH`, `MAX_RESUME_SIZE_BYTES`, `WORKER_CONCURRENCY`, rate limits, `TRUST_PROXY`, and `SHUTDOWN_TIMEOUT_MS`. Do not copy local secrets into deployment configuration or expose server-only values to the frontend.
+---
 
-`GET /api/v1/metrics` exposes bounded Prometheus text metrics for HTTP requests, HTTP errors, durations, queue outcomes, search attempts/failures, and resume attempts/failures. Labels are limited to method, route, status code, and job type; credentials, personal data, and resource IDs are never labels. Metrics are process-local, so production deployments should scrape each API/worker process or aggregate them at the infrastructure layer.
+# Engineering Highlights
 
-SerpApi requests have a 15-second timeout and at most one conservative retry for transient network, rate-limit, or 5xx failures. BullMQ remains the durable retry boundary with three attempts and exponential backoff; provider retries are deliberately bounded to avoid retry multiplication. Provider errors are classified without exposing raw responses or API keys.
+### Asynchronous processing
 
-Redis is currently used for BullMQ and readiness checks. A shared job-search response cache was not added: search results are already persisted asynchronously, and adding a cache would require an explicit freshness/invalidation policy across independently deployed workers and users. This avoids serving stale or incorrectly scoped results.
+Long-running resume and job-discovery operations are handled through BullMQ workers instead of blocking HTTP requests.
 
-## Engineering trade-offs and limitations
+### Explainable matching
 
-RoleScout remains a modular monolith because its workflows share authentication, persistence, and matching boundaries. BullMQ isolates expensive resume/provider work from HTTP requests. Matching and recommendation ranking remain deterministic and explainable rather than LLM-controlled. Recommendation evaluation is capped at 500 persisted jobs, lists are paginated with a maximum page size of 50, uploads default to 10 MB, JSON requests are capped at 1 MB, and worker concurrency is configurable.
+Job compatibility is calculated using explicit weighted dimensions rather than an opaque recommendation score.
 
-The local Docker Compose file provisions development dependencies, but live deployment, managed-service failover, and production HTTPS have not been verified in this workspace. The default CI validates Docker Compose configuration rather than launching a production stack. A real SerpApi key is required for live job discovery; tests use provider-boundary mocks.
+### Data normalization
 
-## Production hardening
+Provider-specific job responses are transformed into a canonical internal job representation.
 
-Production configuration is validated at startup. Use a generated `AUTH_SECRET`, set `NODE_ENV=production`, configure `TRUST_PROXY` only for the number of trusted reverse-proxy hops, and keep `RESUME_STORAGE_PATH` on private durable storage. The API disables the Express signature header, uses Helmet and strict CORS, applies JSON/file limits, and rate-limits API and authentication requests. For horizontally scaled deployments, replace the default process-local limiter store with a shared store at the infrastructure layer.
+### Deduplication
 
-Use `/api/v1/health` for liveness and `/api/v1/health/ready` for readiness. Readiness checks PostgreSQL and Redis and returns HTTP 503 until both dependencies are available. API and worker shutdowns close HTTP/queue/Redis/Prisma resources with a bounded timeout.
+Jobs are identified using provider-specific identifiers where available, with fallback identity handling for listings without reliable external IDs.
 
-Production images are defined by [server/Dockerfile](./server/Dockerfile) and [client/Dockerfile](./client/Dockerfile). Run Prisma migrations as a release step with `npx prisma migrate deploy --schema server/prisma/schema.prisma`; do not use `prisma db push` in production. CI runs builds, lint, tests, Prisma validation, and Docker Compose validation.
+### Secure authentication
 
-## Project Structure
+Authentication uses server-managed HTTP-only cookies with session invalidation support.
 
-`server/` contains the modular Express API, Prisma schema, authentication services, repositories, middleware, and configuration. `client/` contains the Vite React application, API layer, authentication state, routes, and pages. `docker-compose.yml` provides PostgreSQL and Redis for local development.
+### Modular architecture
 
-Matching, deterministic scores, saved jobs, applications, recommendations, notifications, and analytics are intentionally not implemented. The code and automated tests validate queue configuration and processing boundaries, but live Redis/PostgreSQL worker execution has not been verified when Docker Desktop is unavailable.
+Domain functionality is separated into modules while keeping the application deployable as a modular monolith.
+
+---
+
+# Why RoleScout?
+
+Most job-search platforms leave candidates with hundreds of listings and little context about which opportunities actually fit.
+
+RoleScout focuses on the candidate rather than just the job listing:
+
+```text
+Resume
+  ↓
+Candidate Profile
+  ↓
+Personalized Search
+  ↓
+Normalized Jobs
+  ↓
+Explainable Matching
+  ↓
+Recommendations
+  ↓
+Application Tracking
+```
+
+The goal is to reduce the gap between **finding jobs** and **finding relevant jobs**.
+
+---
+
+# License
+
+This project is intended for educational and portfolio purposes.
