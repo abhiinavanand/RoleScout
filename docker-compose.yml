@@ -1,0 +1,32 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: rolescout
+      POSTGRES_PASSWORD: rolescout
+      POSTGRES_DB: rolescout
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - rolescout-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rolescout -d rolescout"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - rolescout-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+volumes:
+  rolescout-postgres-data:
+  rolescout-redis-data:

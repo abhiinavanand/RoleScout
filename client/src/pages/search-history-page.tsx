@@ -1,0 +1,12 @@
+import { Link, useNavigate } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import * as jobsApi from "../api/jobs";
+
+export function SearchHistoryPage() {
+  const navigate = useNavigate();
+  const client = useQueryClient();
+  const searches = useQuery({ queryKey: ["searches"], queryFn: jobsApi.listSearches });
+  const remove = useMutation({ mutationFn: jobsApi.deleteSearch, onSuccess: () => client.invalidateQueries({ queryKey: ["searches"] }) });
+  if (searches.isLoading) return <main className="page-center">Loading search history...</main>;
+  return <main className="dashboard"><h1>Search history</h1><p className="lead">Recent job searches and their status.</p>{searches.error && <p className="form-error" role="alert">Couldn't load search history. Please try again.</p>}{!searches.data?.searches.length && <div className="empty-panel"><p className="muted">Your searches will appear here.</p></div>}<section className="history-list">{searches.data?.searches.map((search) => { const filters = search.filters as { employmentType?: string; experienceLevel?: string; remote?: boolean }; const status = search.processingStatus === "COMPLETED" ? "Completed" : search.processingStatus === "FAILED" ? "Search failed" : "Processing"; const rerun = new URLSearchParams({ query: search.query, ...(search.location ? { location: search.location } : {}), remoteOnly: String(filters.remote ?? false), ...(filters.employmentType ? { employmentType: filters.employmentType } : {}), ...(filters.experienceLevel ? { experienceLevel: filters.experienceLevel } : {}) }); return <article className="history-row" key={search.id}><div><strong>{search.query}</strong><p className="muted">{search.location || "Any location"} · {[filters.employmentType, filters.experienceLevel, filters.remote ? "Remote" : null].filter(Boolean).join(" · ") || "No additional filters"} · {new Date(search.createdAt).toLocaleDateString()}</p><span className={`status-badge status-${search.processingStatus.toLowerCase()}`}>{status}</span></div><div className="history-actions"><button className="button-link" onClick={() => navigate(`/jobs?${rerun.toString()}`)}>{search.processingStatus === "FAILED" ? "Retry" : "Search again"}</button><button className="button-link" onClick={() => remove.mutate(search.id)} disabled={remove.isPending}>Delete</button></div></article>; })}</section><Link to="/jobs">Search for jobs</Link></main>;
+}

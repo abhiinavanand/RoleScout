@@ -1,0 +1,14 @@
+{
+  "name": "rolescout",
+  "private": true,
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace server & npm run dev --workspace client",
+    "build": "npm run build --workspace server && npm run build --workspace client",
+    "test": "npm test --workspace server",
+    "openapi:validate": "node scripts/validate-openapi.mjs"
+  }
+}

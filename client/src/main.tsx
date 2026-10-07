@@ -1,0 +1,21 @@
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { AuthProvider } from "./features/auth/auth-context";
+import { AppLayout } from "./components/app-layout";
+import { ProtectedRoute } from "./components/protected-route";
+import { AuthPage } from "./pages/auth-page";
+import { DashboardPage } from "./pages/dashboard-page";
+import { ResumePage } from "./pages/resume-page";
+import { ProfilePage } from "./pages/profile-page";
+import { JobsPage } from "./pages/jobs-page";
+import { JobDetailsPage } from "./pages/job-details-page";
+import { SearchHistoryPage } from "./pages/search-history-page";
+import { ApplicationsPage } from "./pages/applications-page";
+import { AnalyticsPage } from "./pages/analytics-page";
+import { RecommendationsPage } from "./pages/recommendations-page";
+import "./styles.css";
+
+const queryClient = new QueryClient();
+createRoot(document.getElementById("root")!).render(<StrictMode><QueryClientProvider client={queryClient}><BrowserRouter><AuthProvider><Routes><Route path="/login" element={<AuthPage mode="login" />} /><Route path="/register" element={<AuthPage mode="register" />} /><Route element={<ProtectedRoute />}><Route element={<AppLayout />}><Route path="/dashboard" element={<DashboardPage />} /><Route path="/resume" element={<ResumePage />} /><Route path="/profile" element={<ProfilePage />} /><Route path="/jobs" element={<JobsPage />} /><Route path="/jobs/:id" element={<JobDetailsPage />} /><Route path="/searches" element={<SearchHistoryPage />} /><Route path="/applications" element={<ApplicationsPage />} /><Route path="/analytics" element={<AnalyticsPage />} /><Route path="/recommendations" element={<RecommendationsPage />} /></Route></Route><Route path="*" element={<Navigate to="/dashboard" replace />} /></Routes></AuthProvider></BrowserRouter></QueryClientProvider></StrictMode>);

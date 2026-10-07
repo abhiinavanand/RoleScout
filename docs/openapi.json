@@ -1,0 +1,140 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "RoleScout API",
+    "version": "1.0.0",
+    "description": "Authenticated REST API for job discovery, matching, resumes, recommendations, applications, and analytics."
+  },
+  "servers": [{ "url": "http://localhost:4000", "description": "Local API" }],
+  "tags": [
+    { "name": "Auth" }, { "name": "Resumes" }, { "name": "Profile" },
+    { "name": "Jobs" }, { "name": "Searches" }, { "name": "Recommendations" },
+    { "name": "Applications" }, { "name": "Saved jobs" }, { "name": "Analytics" },
+    { "name": "Operations" }
+  ],
+  "paths": {
+    "/api/v1/auth/register": {
+      "post": {
+        "tags": ["Auth"], "summary": "Register a user",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RegisterRequest" } } } },
+        "responses": { "201": { "$ref": "#/components/responses/Success" }, "409": { "$ref": "#/components/responses/Conflict" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": ["Auth"], "summary": "Login and set the HTTP-only session cookie",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginRequest" } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": { "tags": ["Auth"], "summary": "Revoke the current user's sessions and clear the cookie", "responses": { "200": { "$ref": "#/components/responses/Success" } } }
+    },
+    "/api/v1/auth/me": {
+      "get": { "tags": ["Auth"], "security": [{ "cookieAuth": [] }], "responses": { "200": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" } } }
+    },
+    "/api/v1/resumes": {
+      "get": { "tags": ["Resumes"], "security": [{ "cookieAuth": [] }], "responses": { "200": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" } } },
+      "post": {
+        "tags": ["Resumes"], "security": [{ "cookieAuth": [] }], "summary": "Upload a PDF or DOCX resume",
+        "requestBody": { "required": true, "content": { "multipart/form-data": { "schema": { "type": "object", "required": ["resume"], "properties": { "resume": { "type": "string", "format": "binary" } } } } } },
+        "responses": { "202": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "413": { "description": "Resume exceeds the configured size limit" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/api/v1/resumes/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "get": { "tags": ["Resumes"], "security": [{ "cookieAuth": [] }], "responses": { "200": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "delete": { "tags": ["Resumes"], "security": [{ "cookieAuth": [] }], "responses": { "200": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/v1/resumes/{id}/status": {
+      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "get": { "tags": ["Resumes"], "security": [{ "cookieAuth": [] }], "responses": { "200": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/v1/profile": {
+      "get": { "tags": ["Profile"], "security": [{ "cookieAuth": [] }], "responses": { "200": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" } } },
+      "put": { "tags": ["Profile"], "security": [{ "cookieAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/Json" }, "responses": { "200": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "422": { "$ref": "#/components/responses/ValidationError" } } }
+    },
+    "/api/v1/profile/reparse": {
+      "post": { "tags": ["Profile"], "security": [{ "cookieAuth": [] }], "responses": { "202": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/v1/jobs/search": {
+      "post": { "tags": ["Jobs"], "security": [{ "cookieAuth": [] }], "summary": "Create an asynchronous job search", "requestBody": { "$ref": "#/components/requestBodies/JobSearch" }, "responses": { "202": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "422": { "$ref": "#/components/responses/ValidationError" }, "429": { "$ref": "#/components/responses/RateLimited" } } }
+    },
+    "/api/v1/jobs": {
+      "get": { "tags": ["Jobs"], "security": [{ "cookieAuth": [] }], "parameters": [{ "$ref": "#/components/parameters/Page" }, { "$ref": "#/components/parameters/Limit" }, { "in": "query", "name": "keyword", "schema": { "type": "string" } }, { "in": "query", "name": "location", "schema": { "type": "string" } }, { "in": "query", "name": "workplaceType", "schema": { "type": "string" } }, { "in": "query", "name": "employmentType", "schema": { "type": "string" } }, { "in": "query", "name": "source", "schema": { "type": "string" } }], "responses": { "200": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "422": { "$ref": "#/components/responses/ValidationError" } } }
+    },
+    "/api/v1/jobs/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "get": { "tags": ["Jobs"], "security": [{ "cookieAuth": [] }], "responses": { "200": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/v1/jobs/{id}/match": {
+      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "get": { "tags": ["Jobs"], "security": [{ "cookieAuth": [] }], "responses": { "200": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/v1/searches": {
+      "get": { "tags": ["Searches"], "security": [{ "cookieAuth": [] }], "responses": { "200": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" } } }
+    },
+    "/api/v1/searches/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "delete": { "tags": ["Searches"], "security": [{ "cookieAuth": [] }], "responses": { "200": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/v1/searches/{id}/status": {
+      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "get": { "tags": ["Searches"], "security": [{ "cookieAuth": [] }], "responses": { "200": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/v1/recommendations/jobs": {
+      "get": { "tags": ["Recommendations"], "security": [{ "cookieAuth": [] }], "parameters": [{ "$ref": "#/components/parameters/Page" }, { "$ref": "#/components/parameters/PageSize" }], "responses": { "200": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "422": { "$ref": "#/components/responses/ValidationError" } } }
+    },
+    "/api/v1/applications": {
+      "get": { "tags": ["Applications"], "security": [{ "cookieAuth": [] }], "parameters": [{ "$ref": "#/components/parameters/Page" }, { "$ref": "#/components/parameters/PageSize" }, { "in": "query", "name": "status", "schema": { "type": "string" } }], "responses": { "200": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" } } },
+      "post": { "tags": ["Applications"], "security": [{ "cookieAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/Json" }, "responses": { "201": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" }, "422": { "$ref": "#/components/responses/ValidationError" } } }
+    },
+    "/api/v1/applications/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "get": { "tags": ["Applications"], "security": [{ "cookieAuth": [] }], "responses": { "200": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "patch": { "tags": ["Applications"], "security": [{ "cookieAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/Json" }, "responses": { "200": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" }, "422": { "$ref": "#/components/responses/ValidationError" } } },
+      "delete": { "tags": ["Applications"], "security": [{ "cookieAuth": [] }], "responses": { "200": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/v1/saved-jobs": {
+      "get": { "tags": ["Saved jobs"], "security": [{ "cookieAuth": [] }], "responses": { "200": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" } } }
+    },
+    "/api/v1/saved-jobs/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "post": { "tags": ["Saved jobs"], "security": [{ "cookieAuth": [] }], "responses": { "201": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" } } },
+      "delete": { "tags": ["Saved jobs"], "security": [{ "cookieAuth": [] }], "responses": { "200": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/v1/analytics/overview": {
+      "get": { "tags": ["Analytics"], "security": [{ "cookieAuth": [] }], "parameters": [{ "in": "query", "name": "range", "schema": { "type": "string", "enum": ["7d", "30d", "90d", "all"] } }], "responses": { "200": { "$ref": "#/components/responses/Success" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "422": { "$ref": "#/components/responses/ValidationError" } } }
+    },
+    "/api/v1/health": { "get": { "tags": ["Operations"], "security": [], "responses": { "200": { "$ref": "#/components/responses/Success" } } } },
+    "/api/v1/health/ready": { "get": { "tags": ["Operations"], "security": [], "responses": { "200": { "$ref": "#/components/responses/Success" }, "503": { "description": "Database or Redis is unavailable" } } } },
+    "/api/v1/metrics": { "get": { "tags": ["Operations"], "security": [], "summary": "Prometheus metrics", "responses": { "200": { "description": "Prometheus text exposition format", "content": { "text/plain": { "schema": { "type": "string" } } } } } } }
+  },
+  "components": {
+    "securitySchemes": { "cookieAuth": { "type": "apiKey", "in": "cookie", "name": "rolescout_session" } },
+    "parameters": {
+      "Id": { "in": "path", "name": "id", "required": true, "schema": { "type": "string", "minLength": 1, "maxLength": 100 } },
+      "Page": { "in": "query", "name": "page", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 1 } },
+      "Limit": { "in": "query", "name": "limit", "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 } },
+      "PageSize": { "in": "query", "name": "pageSize", "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 } }
+    },
+    "requestBodies": {
+      "Json": { "required": true, "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+      "JobSearch": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/JobSearchRequest" } } } }
+    },
+    "schemas": {
+      "RegisterRequest": { "type": "object", "required": ["name", "email", "password"], "properties": { "name": { "type": "string", "minLength": 1, "maxLength": 100 }, "email": { "type": "string", "format": "email" }, "password": { "type": "string", "minLength": 8 } } },
+      "LoginRequest": { "type": "object", "required": ["email", "password"], "properties": { "email": { "type": "string", "format": "email" }, "password": { "type": "string" } } },
+      "JobSearchRequest": { "type": "object", "required": ["query"], "properties": { "query": { "type": "string", "minLength": 1, "maxLength": 200 }, "location": { "type": "string", "maxLength": 200 }, "remote": { "type": "boolean" }, "employmentType": { "type": "string", "maxLength": 50 }, "experienceLevel": { "type": "string", "maxLength": 50 }, "page": { "type": "integer", "minimum": 1, "maximum": 100 }, "limit": { "type": "integer", "minimum": 1, "maximum": 50 } } },
+      "ApiResponse": { "type": "object", "required": ["success"], "properties": { "success": { "type": "boolean" }, "data": { "type": "object" }, "error": { "type": "object" } } }
+    },
+    "responses": {
+      "Success": { "description": "Successful response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponse" } } } },
+      "Unauthorized": { "description": "Authentication is required" },
+      "NotFound": { "description": "Resource not found" },
+      "Conflict": { "description": "Resource conflicts with an existing record" },
+      "ValidationError": { "description": "Request validation failed" },
+      "RateLimited": { "description": "Rate limit exceeded" }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run prisma:generate --workspace server
+      - run: npm run build
+      - run: npm run lint --workspace server
+      - run: npm run lint --workspace client
+      - run: npm test --workspace server
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://rolescout:rolescout@localhost:5432/rolescout
+          REDIS_URL: redis://localhost:6379
+          AUTH_SECRET: ci-only-secret-that-is-long-enough-for-tests
+          CLIENT_URL: http://localhost:5173
+      - run: npx prisma validate --schema server/prisma/schema.prisma
+      - run: npm run openapi:validate
+      - run: docker compose config
